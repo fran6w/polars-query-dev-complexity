@@ -1,0 +1,6 @@
+__pycache__/
+logs/
+polars-benchmark/
+*.backup
+*.jsonl
+*.pyc
