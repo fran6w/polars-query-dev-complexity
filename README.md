@@ -163,6 +163,50 @@ df = pl.read_ndjson("logs/complexity.jsonl")
 df.top_k(10, by="complexity")
 ```
 
+### Customization
+
+The scoring behavior can be customized by overriding the default **weights** and **thresholds** used by the library.
+
+Most functions (e.g. `score_complexity(), score_plan_string(), complexity_collect()`) accept optional dictionaries to override these defaults.
+
+---
+
+#### Weights
+
+Weights control how much each operation or feature contributes to the overall complexity score.
+
+You can override **any subset** of the default weights:
+
+```python
+score = score_complexity(
+    lf,
+    weights={
+        "filter_depth": 1.2,   # reduce cost of filters
+        "join": 6.0	       # make joins more expensive
+    }
+)
+```
+
+#### Notes
+Custom weights and thresholds make it easy to adapt the scoring model to different use cases or coding styles.
+Thresholds are automatically normalized and sorted internally, so order does not matter.
+It is recommended to always include a final upper bound (e.g. "very complex": float("inf")).
+
+#### Thresholds
+
+Thresholds define how the numeric score maps to a complexity tier (e.g. simple, moderate, complex).
+
+You can override them in the same way:
+
+```python
+score = score_complexity(
+    lf,
+    thresholds={
+        "complex": 40,
+    }
+)
+```
+
 ### Integrating in a Plotly Dash app
 
 Add at the **top of `app.py`**, before layout and callbacks, so the patch is active for the lifetime of the worker process regardless of Dash's reloader:
@@ -204,7 +248,7 @@ on the unexecuted plan. Parquet scans are mocked with empty but correctly-typed
 `LazyFrame`s so each query module can be imported without any `.parquet` files.
 
 ```bash
-uv pip install linetimer
+uv pip install linetimer  # library imported by query files
 git clone https://github.com/pola-rs/polars-benchmark.git
 uv run score_tpch.py
 ```
