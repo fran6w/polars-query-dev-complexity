@@ -149,13 +149,15 @@ Each line in `complexity.jsonl`:
 }
 ```
 
-Read back without pandas:
+Read back without polars:
 
 ```python
 records = handler.read_all()   # list[dict]
 records = handler.tail(20)     # last 20 records
+```
+Or with polars:
 
-# or with polars
+```python
 import polars as pl
 df = pl.read_ndjson("logs/complexity.jsonl")
 df.top_k(10, by="complexity")
@@ -163,8 +165,7 @@ df.top_k(10, by="complexity")
 
 ### Integrating in a Plotly Dash app
 
-Add at the **top of `app.py`**, before layout and callbacks, so the patch is active
-for the lifetime of the worker process regardless of Dash's reloader:
+Add at the **top of `app.py`**, before layout and callbacks, so the patch is active for the lifetime of the worker process regardless of Dash's reloader:
 
 ```python
 import os
