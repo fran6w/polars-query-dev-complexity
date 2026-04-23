@@ -71,8 +71,8 @@ from polars_query_dev_complexity import score_complexity, score_plan_string
 # From a live LazyFrame
 lf = (
     pl.scan_parquet("user.parquet")
-    .filter(pl.col("role") == "MEDIA")
-    .filter(pl.col("position").is_in(["officer"]))
+    .filter(pl.col("department") == "TECH")
+    .filter(pl.col("position").is_in(["engineer"]))
     .filter(pl.col("createdAt").dt.year() >= 2026)
     .select(pl.col("_id").count())
 )
