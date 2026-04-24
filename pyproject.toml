@@ -1,7 +1,7 @@
 [project]
 name = "polars-query-dev-complexity"
 version = "0.1.0"
-description = "Scores the *authoring* complexity of a Polars LazyFrame query from its unoptimised explain plan."
+description = "A lightweight tool for measuring the **authoring complexity** of Polars LazyFrame queries."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

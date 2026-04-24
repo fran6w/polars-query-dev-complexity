@@ -1,6 +1,6 @@
 # polars-query-dev-complexity
 
-Measures the **authoring complexity** of [Polars](https://pola.rs) `LazyFrame` queries — i.e. how much effort a developer put into *writing* a query — by parsing the unoptimised explain plan produced by `LazyFrame.explain(optimized=False)`.
+A lightweight tool for measuring the **authoring complexity** of Polars LazyFrame queries — i.e. the effort required to write a query — based on the unoptimised explain plan (LazyFrame.explain(optimized=False)).
 
 > **Authoring complexity ≠ execution complexity.**
 > A query can be trivial to write yet expensive to run, or vice versa.
@@ -201,7 +201,7 @@ import polars as pl
 df = (pl.read_ndjson("logs/complexity.jsonl")
       .with_columns(tier=pl.col("tier").cast(pl.Enum(["trivial", "simple", "moderate", "complex", "very complex"])))
       )
-df.filter(pl.col("complexity") >= "complex")
+df.filter(pl.col("tier") >= "complex")
 ```
 
 ### Customization
