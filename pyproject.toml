@@ -1,0 +1,16 @@
+[project]
+name = "polars-query-dev-complexity"
+version = "0.1.0"
+description = "Scores the *authoring* complexity of a Polars LazyFrame query from its unoptimised explain plan."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "polars",
+]
+
+[dependency-groups]
+tpch = [
+    "linetimer",
+    "pydantic",
+    "pydantic_settings",
+]

@@ -38,29 +38,59 @@ Scores map to a **tier**:
 
 ## Installation
 
-No packaging yet — copy the files you need into your project:
+Clone the repository:
 
+```bash
+git clone https://github.com/fran6w/polars-query-dev-complexity.git
+cd polars-query-dev-complexity
+```
+Set up the environment with `uv`:
+```bash
+uv sync
+```
+This installs the core dependency:
+- `polars`
+
+#### Available files
 ```
 polars_query_dev_complexity.py   ← scorer + context manager + JSONL handler
 demo.py                          ← runnable walkthrough of all features
 score_tpch.py                    ← validate against pola-rs/polars-benchmark
 ```
+#### Alternative installation
 
-The scorer itself has **no dependencies beyond the Python standard library**.
-`polars` is only imported at call time inside `score_complexity()` and `complexity_collect()`,
-so `score_plan_string()` and `JSONLFileHandler` work without Polars installed.
+Install `polars` and use the standalone module directly:
 
 ```bash
-# with uv
-uv add polars
-
-# with pip
 pip install polars
 ```
 
+Then copy or import `polars_query_dev_complexity.py` into your project.
+
+#### Optional components
+
+Additional dependencies are defined for specific use cases.
+
+**TPCH / benchmarking:**
+
+```bash
+uv sync --group tpch
+```
 ---
 
 ## Usage
+
+### Demo
+
+```bash
+uv run demo.py
+```
+
+or
+
+```bash
+python demo.py
+```
 
 ### One-shot scoring
 
@@ -149,18 +179,29 @@ Each line in `complexity.jsonl`:
 }
 ```
 
-Read back without polars:
+Read back without `polars`:
 
 ```python
 records = handler.read_all()   # list[dict]
 records = handler.tail(20)     # last 20 records
 ```
-Or with polars:
+Or with `polars`:
 
 ```python
 import polars as pl
+
 df = pl.read_ndjson("logs/complexity.jsonl")
 df.top_k(10, by="complexity")
+```
+Or again with `polars`:
+
+```python
+import polars as pl
+
+df = (pl.read_ndjson("logs/complexity.jsonl")
+      .with_columns(tier=pl.col("tier").cast(pl.Enum(["trivial", "simple", "moderate", "complex", "very complex"])))
+      )
+df.filter(pl.col("complexity") >= "complex")
 ```
 
 ### Customization
@@ -240,17 +281,14 @@ if not PROD:
 
 `score_tpch.py` validates the scorer against the 22 real-world TPC-H queries
 from [pola-rs/polars-benchmark](https://github.com/pola-rs/polars-benchmark),
-covering a wide range of authoring complexity — from simple date filters (Q6)
-to multi-join aggregations (Q8, Q21).
+covering a wide range of authoring complexity.
 
 No data generation is required: `LazyFrame.explain(optimized=False)` operates
-on the unexecuted plan. Parquet scans are mocked with empty but correctly-typed
-`LazyFrame`s so each query module can be imported without any `.parquet` files.
+on the unexecuted plan. Parquet scans are mocked with empty but correctly-typed `LazyFrame`s so each query module can be imported without any `.parquet` files.
 
 ```bash
-uv pip install linetimer  # library imported by query files
 git clone https://github.com/pola-rs/polars-benchmark.git
-uv run score_tpch.py
+uv run --group tpch score_tpch.py
 ```
 
 Expected output shape:

@@ -1,6 +1,9 @@
 __pycache__/
 logs/
+notebooks/
 polars-benchmark/
 *.backup
 *.jsonl
 *.pyc
+.venv/
+.python-version
