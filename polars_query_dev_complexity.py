@@ -161,8 +161,8 @@ def score_complexity(
     -------
     ComplexityResult with .total, .breakdown, .tier, .explain_plan
     """
-    w = {**WEIGHTS, **(weights or {})}
-    t = {**THRESHOLDS, **(thresholds or {})}
+    w = WEIGHTS | (weights or {})
+    t = THRESHOLDS | (thresholds or {})
     plan = lf.explain(optimized=False)
     return _score_plan(plan, w, t)
 
@@ -176,8 +176,8 @@ def score_plan_string(
     """
     Score directly from an explain-plan string (useful for testing / caching).
     """
-    w = {**WEIGHTS, **(weights or {})}
-    t = {**THRESHOLDS, **(thresholds or {})}
+    w = WEIGHTS | (weights or {})
+    t = THRESHOLDS | (thresholds or {})
     return _score_plan(plan, w, t)
 
 
