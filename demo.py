@@ -159,8 +159,12 @@ with tempfile.TemporaryDirectory() as tmp:
 
     if POLARS_AVAILABLE:
         with complexity_collect(callback=handler, log=False, log_caller=True):
-            lf_simple.collect()
-            lf_complex.collect()
+            def demo_function():
+                lf_simple.collect()
+                lf_complex.collect()
+
+            demo_function()
+            
     else:
         # Feed the handler directly from plan strings when Polars unavailable
         handler(r_simple)
