@@ -267,7 +267,7 @@ if not PROD:
         tz=timezone.utc,
         extra={"app": "my_dash_app"},
     )
-    _ctx = complexity_collect(callback=_handler, log=False)
+    _ctx = complexity_collect(callback=_handler, log=False, log_caller=True)
     _ctx.__enter__()
 ```
 

@@ -158,7 +158,7 @@ with tempfile.TemporaryDirectory() as tmp:
     )
 
     if POLARS_AVAILABLE:
-        with complexity_collect(callback=handler, log=False):
+        with complexity_collect(callback=handler, log=False, log_caller=True):
             lf_simple.collect()
             lf_complex.collect()
     else:

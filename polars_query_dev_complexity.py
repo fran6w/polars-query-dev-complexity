@@ -50,6 +50,7 @@ Usage
 
 """
 
+import inspect
 import re
 from dataclasses import dataclass, field
 from typing import Optional
@@ -104,6 +105,7 @@ class ComplexityResult:
     thresholds: dict[str, float]
     breakdown: dict[str, float] = field(default_factory=dict)
     explain_plan: str = ""
+    caller: str = ""
 
     def __post_init__(self):
         items = [(limit, label) for label, limit in self.thresholds.items()]
@@ -147,6 +149,7 @@ def score_complexity(
     *,
     weights: Optional[dict[str, float]] = None,
     thresholds: Optional[dict[str, float]] = None,
+    caller: Optional[str] = None,
 ) -> ComplexityResult:
     """
     Score the authoring complexity of *lf* from its unoptimised explain plan.
@@ -164,7 +167,7 @@ def score_complexity(
     w = WEIGHTS | (weights or {})
     t = THRESHOLDS | (thresholds or {})
     plan = lf.explain(optimized=False)
-    return _score_plan(plan, w, t)
+    return _score_plan(plan, w, t, caller)
 
 
 def score_plan_string(
@@ -172,18 +175,19 @@ def score_plan_string(
     *,
     weights: Optional[dict[str, float]] = None,
     thresholds: Optional[dict[str, float]] = None,
+    caller: Optional[str] = None,
 ) -> ComplexityResult:
     """
     Score directly from an explain-plan string (useful for testing / caching).
     """
     w = WEIGHTS | (weights or {})
     t = THRESHOLDS | (thresholds or {})
-    return _score_plan(plan, w, t)
+    return _score_plan(plan, w, t, caller)
 
 
 # ── Internal logic ─────────────────────────────────────────────────────────────
 
-def _score_plan(plan: str, w: dict[str, float], t: dict[str, float]) -> ComplexityResult:
+def _score_plan(plan: str, w: dict[str, float], t: dict[str, float], c: str) -> ComplexityResult:
     bd: dict[str, float] = {}
 
     # 1. Operation count
@@ -235,7 +239,7 @@ def _score_plan(plan: str, w: dict[str, float], t: dict[str, float]) -> Complexi
         bd["literal_values"] = lit_count * w["literal_value"]
 
     total = round(sum(bd.values()), 2)
-    return ComplexityResult(total=total, breakdown=bd, explain_plan=plan, thresholds=t)
+    return ComplexityResult(total=total, breakdown=bd, explain_plan=plan, thresholds=t, caller=c)
 
 
 # ── Comparison helper ──────────────────────────────────────────────────────────
@@ -286,6 +290,7 @@ def complexity_collect(
     log: bool = True,
     log_level: int = logging.INFO,
     threshold: Optional[float] = None,
+    log_caller: bool = False,
 ):
     """
     Context manager that temporarily patches ``LazyFrame.collect`` so that
@@ -318,15 +323,19 @@ def complexity_collect(
     _original_collect = pl.LazyFrame.collect
 
     def _instrumented_collect(self, *args, **kwargs):
-        result = score_complexity(self, weights=weights, thresholds=thresholds)
+
+        caller = inspect.stack()[1].function if log_caller else None
+
+        result = score_complexity(self, weights=weights, thresholds=thresholds, caller=caller)
 
         if log:
             logger.log(
                 log_level,
-                "collect() complexity: %.1f [%s]\n%s",
+                "collect() complexity: %.1f [%s]\n%s%s",
                 result.total,
                 result.tier,
                 result.explain_plan,
+                f"\n(caller: {result.caller})" if log_caller else "",
             )
 
         if threshold is not None and result.total > threshold:
@@ -419,6 +428,7 @@ class JSONLFileHandler:
             "tier": result.tier,
             "breakdown": result.breakdown,
             "explain": result.explain_plan,
+            **({"caller": result.caller} if result.caller else {}),
             **self._extra,
         }
         line = json.dumps(record, ensure_ascii=False)
