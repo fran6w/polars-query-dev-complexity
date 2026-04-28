@@ -99,7 +99,7 @@ try:
         .select(pl.col("_id").count())
     )
 
-    from polars_complexity import score_complexity
+    from polars_query_dev_complexity import score_complexity
     for label, lf in [("simple", lf_simple), ("complex", lf_complex)]:
         r = score_complexity(lf)
         print(f"  {label:<10} → {r.total:.1f}  [{r.tier}]")
