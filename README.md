@@ -271,6 +271,21 @@ if not PROD:
     _ctx.__enter__()
 ```
 
+Afterwards, an analysis of all queries by caller within the app is possible:
+
+```python
+df = pl.read_ndjson("logs/complexity.jsonl")
+
+tab = (df
+       .unique(["complexity", "caller"])
+       .sort(by=["caller"])
+       .select("caller", "complexity", "tier", "explain")
+      )
+
+with pl.Config(set_tbl_rows=len(tab), fmt_str_lengths=100):
+    print(tab)
+```
+
 > **Note on Dash's reloader:** with `debug=True`, Dash forks the process.
 > Guard with `os.environ.get("WERKZEUG_RUN_MAIN") == "true"` if you want
 > the patch to apply only in the worker process and not the watcher.
