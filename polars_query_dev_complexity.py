@@ -136,9 +136,9 @@ class ComplexityResult:
         for k, v in self.breakdown.items():
             lines.append(f"  {k:<28} {v:+.1f}")
         lines.append("─" * 44)
-        lines.append("Plan:")
-        for ln in self.explain_plan.splitlines():
-            lines.append("  " + ln)
+        #lines.append("Plan:")
+        #for ln in self.explain_plan.splitlines():
+        #    lines.append("  " + ln)
         return "\n".join(lines)
 
 
@@ -159,6 +159,7 @@ def score_complexity(
     lf      : A Polars LazyFrame (any depth of operations).
     weights : Override any subset of the default WEIGHTS dict.
     thresholds : Override any subset of the default THRESHOLDS dict.
+    caller: Optional caller of LazyFrame.collect().
 
     Returns
     -------

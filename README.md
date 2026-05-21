@@ -278,7 +278,7 @@ df = pl.read_ndjson("logs/complexity.jsonl")
 
 tab = (df
        .unique(["complexity", "caller"])
-       .sort(by=["caller"])
+       .sort(by="caller")
        .select("caller", "complexity", "tier", "explain")
       )
 
