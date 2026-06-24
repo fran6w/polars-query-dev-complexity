@@ -108,15 +108,15 @@ lf = (
 )
 result = score_complexity(lf)
 print(result)
-Authoring complexity : 15.0  [moderate]
-────────────────────────────────────────────
-  operations                   +5.0
-  filter_depth_penalty         +3.0
-  expression_chains            +0.5
-  unique_columns               +2.0
-  aggregations                 +1.5
-  literal_values               +3.0
-────────────────────────────────────────────
+# Authoring complexity : 15.0  [moderate]
+# ────────────────────────────────────────────
+#   operations                   +5.0
+#   filter_depth_penalty         +3.0
+#   expression_chains            +0.5
+#   unique_columns               +2.0
+#   aggregations                 +1.5
+#   literal_values               +3.0
+# ────────────────────────────────────────────
 
 # From a cached plan string
 result = score_plan_string(lf.explain(optimized=False))
@@ -130,7 +130,7 @@ Temporarily patches `LazyFrame.collect()` for the duration of the block.
 The original `collect()` is always restored, even if an exception is raised.
 
 ```python
-from polars_query_dev_complexity import complexity_collect, ComplexityThresholdExceeded
+from polars_query_dev_complexity import complexity_collect
 
 # Accumulate results
 captured = []
@@ -140,13 +140,6 @@ with complexity_collect(callback=captured.append):
 
 for r in captured:
     print(r.total, r.tier)
-
-# Hard gate — block execution above a threshold
-try:
-    with complexity_collect(threshold=20.0):
-        df = lf_very_complex.collect()  # raises before collecting
-except ComplexityThresholdExceeded as e:
-    print(e.result.breakdown)
 ```
 
 ### JSONL logging — one record per `collect()`
@@ -231,7 +224,7 @@ score = score_complexity(
 
 #### Notes
 Custom weights and thresholds make it easy to adapt the scoring model to different use cases or coding styles.
-Thresholds are automatically normalized and sorted internally, so order does not matter.
+Thresholds must be given in increasing tier-severity order (trivial < simple < moderate < complex < very complex). The library validates this and raises `ValueError` if a tier's limit isn't strictly greater than the previous one (this catches misconfigured overrides instead of silently mislabeling scores).
 It is recommended to always include a final upper bound (e.g. "very complex": float("inf")).
 
 #### Thresholds
