@@ -4,6 +4,7 @@ polars_query_dev_complexity.py
 
 Author : Francis Wolinski
 Created: 2026-04-23
+Upadted: 2026-06-24
 License: MIT
 
 Scores the *authoring* complexity of a Polars LazyFrame query
@@ -32,7 +33,7 @@ Usage
 
     # Patch collect() for the duration of a block
     collected = []
-    with complexity_collect(callback=collected.append, threshold=30):
+    with complexity_collect(callback=collected.append):
         df = lf.collect()       # scores first, then collects normally
     # df is the real DataFrame; collected[0] is the ComplexityResult
 
@@ -45,7 +46,7 @@ Usage
         extra={"app": "demo", "env": "dev"},
     )
 
-    with complexity_collect(callback=handler, log=False):
+    with complexity_collect(callback=handler):
         lf.collect()
 
 """
@@ -80,9 +81,32 @@ THRESHOLDS = {
 }
 
 # Regex helpers
+#
+# NOTE on JOIN / SCAN: real Polars explain(optimized=False) output prefixes
+# these keywords with a qualifier — e.g. "INNER JOIN:", "LEFT JOIN:",
+# "Parquet SCAN [...]", "Csv SCAN [...]" — so a simple "^\s*KEYWORD\b" anchor
+# never matches them. Verified against polars==1.42 for: inner/left/full/
+# semi/anti/cross joins, and parquet/csv scans. Each gets its own regex below.
+#
+# JOIN also needs care to avoid double-counting: every join block has both
+# an opening line ("INNER JOIN:") and a closing line ("END INNER JOIN") that
+# both contain the word JOIN. Anchoring on the trailing colon picks out only
+# the opening line.
+#
+# PROJECT was dropped from operation counting: it's metadata attached to a
+# scan/DF node (column projection), not a distinct authoring action — the
+# developer didn't write `.project()`.
 _RE_OP      = re.compile(
-    r"^\s*(SELECT|FILTER|SORT|GROUP_BY|JOIN|AGGREGATE|EXPLODE|MELT|"
-    r"WITH_COLUMNS|SLICE|LIMIT|CACHE|SCAN|PROJECT)\b",
+    r"^\s*(SELECT|FILTER|SORT|AGGREGATE|GROUP_BY|WITH_COLUMNS|SLICE|LIMIT|"
+    r"CACHE|EXPLODE|UNIQUE|UNPIVOT|MELT)\b",
+    re.MULTILINE | re.IGNORECASE,
+)
+_RE_JOIN    = re.compile(
+    r"^\s*(?:\w+\s+)?JOIN:\s*$",          # opening line only (has trailing ':')
+    re.MULTILINE | re.IGNORECASE,
+)
+_RE_SCAN    = re.compile(
+    r"^\s*(?:\w+\s+)?SCAN\b",             # optional one-word format prefix
     re.MULTILINE | re.IGNORECASE,
 )
 _RE_COL     = re.compile(r'col\("([^"]+)"\)')
@@ -108,17 +132,28 @@ class ComplexityResult:
     caller: str = ""
 
     def __post_init__(self):
-        items = [(limit, label) for label, limit in self.thresholds.items()]
-        items.sort(key=lambda x: x[0])
-
-        # Validation (optional but recommended)
+        # Validate in the dict's own insertion order, which is the tier
+        # severity order (trivial < simple < moderate < ...) for the default
+        # thresholds and any override built as `THRESHOLDS | overrides`.
+        #
+        # IMPORTANT: do not sort by limit first — sorting then checking the
+        # sorted list is sorted can never raise, so it silently accepts
+        # inverted configs (e.g. "trivial" given a higher ceiling than
+        # "simple"), which then mislabels scores. Validate the order as
+        # given instead.
         last = -float("inf")
-        for limit, label in items:
-            if limit < last:
-                raise ValueError("Thresholds must be increasing")
+        normalized = []
+        for label, limit in self.thresholds.items():
+            if limit <= last:
+                raise ValueError(
+                    f"Thresholds must be strictly increasing in tier-severity "
+                    f"order; '{label}'={limit} is not greater than the "
+                    f"previous tier's limit ({last})."
+                )
+            normalized.append((limit, label))
             last = limit
 
-        self._normalized = items
+        self._normalized = normalized
 
     # Derived tier (purely qualitative)
     @property
@@ -191,12 +226,15 @@ def score_plan_string(
 def _score_plan(plan: str, w: dict[str, float], t: dict[str, float], c: str) -> ComplexityResult:
     bd: dict[str, float] = {}
 
-    # 1. Operation count
-    ops = _RE_OP.findall(plan)
-    bd["operations"] = len(ops) * w["op_base"]
+    # 1. Operation count — simple keyword ops + dedicated JOIN/SCAN detectors
+    #    (JOIN and SCAN need separate regexes; see notes above _RE_JOIN/_RE_SCAN)
+    simple_ops = _RE_OP.findall(plan)
+    join_count = len(_RE_JOIN.findall(plan))
+    scan_count = len(_RE_SCAN.findall(plan))
+    total_ops = len(simple_ops) + join_count + scan_count
+    bd["operations"] = total_ops * w["op_base"]
 
     # 2. JOIN bonus
-    join_count = sum(1 for op in ops if op.upper() == "JOIN")
     if join_count:
         bd["joins"] = join_count * w["join"]
 
@@ -243,43 +281,11 @@ def _score_plan(plan: str, w: dict[str, float], t: dict[str, float], c: str) -> 
     return ComplexityResult(total=total, breakdown=bd, explain_plan=plan, thresholds=t, caller=c)
 
 
-# ── Comparison helper ──────────────────────────────────────────────────────────
-
-def compare(
-    *frames_or_plans: "pl.LazyFrame | str",
-    labels: Optional[list[str]] = None,
-    weights: Optional[dict[str, float]] = None,
-    thresholds: Optional[dict[str, float]] = None,
-) -> list[ComplexityResult]:
-    """
-    Score and rank multiple LazyFrames or plan strings.
-
-    Example
-    -------
-    results = compare(lf_simple, lf_complex, labels=["baseline", "filtered"])
-    for r in results:
-        print(r)
-    """
-    results = []
-    for i, item in enumerate(frames_or_plans):
-        if isinstance(item, pl.LazyFrame):
-            r = score_complexity(item, weights=weights, thresholds=thresholds)
-        else:
-            r = score_plan_string(item, weights=weights, thresholds=thresholds)
-        if labels:
-            r.breakdown["__label__"] = labels[i]   # store for display only
-        results.append(r)
-
-    results.sort(key=lambda r: r.total)
-    return results
 
 
 # ── Context manager ───────────────────────────────────────────────────────────
 
 import contextlib
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 @contextlib.contextmanager
@@ -288,9 +294,6 @@ def complexity_collect(
     weights: Optional[dict[str, float]] = None,
     thresholds: Optional[dict[str, float]] = None,
     callback=None,
-    log: bool = True,
-    log_level: int = logging.INFO,
-    threshold: Optional[float] = None,
     log_caller: bool = False,
 ):
     """
@@ -300,26 +303,19 @@ def complexity_collect(
 
     Parameters
     ----------
-    weights   : Override default scoring weights (passed straight to scorer).
-    thresholds: Override default thresholds (passed straight to scorer).
-    callback  : Optional callable ``(result: ComplexityResult) -> None`` called
-                for every collect.  Use it to accumulate results, push metrics,
-                raise custom alerts, etc.  Defaults to None.
-    log       : Whether to log each score via the module logger (default True).
-    log_level : Logging level used when ``log=True`` (default logging.INFO).
-    threshold : If set, raises ``ComplexityThresholdExceeded`` when
-                ``result.total`` exceeds this value *before* executing collect.
+    weights    : Override default scoring weights (passed straight to scorer).
+    thresholds : Override default tier thresholds (passed straight to scorer).
+    callback   : Optional callable ``(result: ComplexityResult) -> None`` called
+                 for every collect — e.g. a ``JSONLFileHandler`` instance.
+    log_caller : If True, records the immediate caller's function name on
+                 ``result.caller`` (one frame up the stack from ``collect()``).
 
     Example
     -------
-    results = []
-
-    with complexity_collect(callback=results.append, threshold=30):
-        df1 = lf_simple.collect()   # scores, then collects normally
-        df2 = lf_complex.collect()  # raises if total > 30
-
-    for r in results:
-        print(r)
+    handler = JSONLFileHandler("complexity.jsonl")
+    with complexity_collect(callback=handler, log_caller=True):
+        df1 = lf_simple.collect()
+        df2 = lf_complex.collect()
     """
     _original_collect = pl.LazyFrame.collect
 
@@ -328,19 +324,6 @@ def complexity_collect(
         caller = inspect.stack()[1].function if log_caller else None
 
         result = score_complexity(self, weights=weights, thresholds=thresholds, caller=caller)
-
-        if log:
-            logger.log(
-                log_level,
-                "collect() complexity: %.1f [%s]\n%s%s",
-                result.total,
-                result.tier,
-                result.explain_plan,
-                f"\n(caller: {result.caller})" if log_caller else "",
-            )
-
-        if threshold is not None and result.total > threshold:
-            raise ComplexityThresholdExceeded(result, threshold)
 
         if callback is not None:
             callback(result)
@@ -352,18 +335,6 @@ def complexity_collect(
         yield
     finally:
         pl.LazyFrame.collect = _original_collect
-
-
-class ComplexityThresholdExceeded(Exception):
-    """Raised by ``complexity_collect`` when a query exceeds the threshold."""
-
-    def __init__(self, result: ComplexityResult, threshold: float):
-        self.result = result
-        self.threshold = threshold
-        super().__init__(
-            f"Query complexity {result.total:.1f} [{result.tier}] "
-            f"exceeds threshold {threshold}.\n{result}"
-        )
 
 
 # ── JSONL file handler ────────────────────────────────────────────────────────

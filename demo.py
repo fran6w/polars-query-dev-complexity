@@ -24,7 +24,6 @@ from datetime import timezone
 
 # Rename polars_query_dev_complexity.py first; until then import as-is:
 from polars_query_dev_complexity import (
-    ComplexityThresholdExceeded,
     JSONLFileHandler,
     complexity_collect,
     score_plan_string,
@@ -113,33 +112,15 @@ except ImportError:
 
 # ── 3. complexity_collect() — accumulate results ──────────────────────────────
 
-section("3a. CONTEXT MANAGER: accumulate results")
+section("3. CONTEXT MANAGER: accumulate results")
 if POLARS_AVAILABLE:
     captured = []
-    with complexity_collect(callback=captured.append, log=False):
+    with complexity_collect(callback=captured.append):
         df_s = lf_simple.collect()
         df_c = lf_complex.collect()
     print(f"  collect() calls intercepted : {len(captured)}")
     print(f"  scores captured             : {[r.total for r in captured]}")
     print(f"  DataFrames returned intact  : shapes {[df_s.shape, df_c.shape]}")
-else:
-    print("  (skipped — polars not installed)")
-
-
-# ── 3b. complexity_collect() — threshold guard ────────────────────────────────
-
-section("3b. CONTEXT MANAGER: threshold guard")
-if POLARS_AVAILABLE:
-    try:
-        with complexity_collect(threshold=10.0, log=False):
-            lf_simple.collect()   # passes — score is low
-            lf_complex.collect()  # blocked — score exceeds 10.0
-    except ComplexityThresholdExceeded as exc:
-        print(f"  collect() blocked: {exc.result.total:.1f} > {exc.threshold}")
-        print(f"  tier    : {exc.result.tier}")
-        print(f"  breakdown:")
-        for k, v in exc.result.breakdown.items():
-            print(f"    {k:<28} {v:+.2f}")
 else:
     print("  (skipped — polars not installed)")
 
@@ -158,13 +139,13 @@ with tempfile.TemporaryDirectory() as tmp:
     )
 
     if POLARS_AVAILABLE:
-        with complexity_collect(callback=handler, log=False, log_caller=True):
+        with complexity_collect(callback=handler, log_caller=True):
             def demo_function():
                 lf_simple.collect()
                 lf_complex.collect()
 
             demo_function()
-            
+
     else:
         # Feed the handler directly from plan strings when Polars unavailable
         handler(r_simple)
@@ -184,7 +165,7 @@ with tempfile.TemporaryDirectory() as tmp:
         print(f"  complexity: {rec['complexity']}  [{rec['tier']}]")
         print(f"  breakdown : {rec['breakdown']}")
 
-    # ── 4d. Simple analysis without pandas ───────────────────────────────
+    # ── 4d. Simple analysis without polars ───────────────────────────────
     section("4d. JSONL LOG: simple analysis")
     all_records = handler.read_all()
     scores = [r["complexity"] for r in all_records]
@@ -194,14 +175,6 @@ with tempfile.TemporaryDirectory() as tmp:
     print(f"  max    : {max(scores):.1f}")
     print(f"  avg    : {sum(scores) / len(scores):.1f}")
     print(f"  tiers  : {dict((t, tiers.count(t)) for t in sorted(set(tiers)))}")
-
-    above_threshold = [r for r in all_records if r["complexity"] > 10.0]
-    print(f"\n  queries above threshold 10.0:")
-    if above_threshold:
-        for r in above_threshold:
-            print(f"    {r['timestamp']}  {r['complexity']:.1f}  [{r['tier']}]")
-    else:
-        print("    none")
 
 # ── cleanup ───────────────────────────────────────────────────────────────────
 if POLARS_AVAILABLE:

@@ -108,19 +108,20 @@ lf = (
 )
 result = score_complexity(lf)
 print(result)
-# Authoring complexity : 16.0  [moderate]
-# ────────────────────────────────────────────
-#   operations                   +5.00
-#   filter_depth_penalty         +3.00
-#   expression_chains            +1.00
-#   unique_columns               +2.00
-#   aggregations                 +1.50
-#   literal_values               +3.50
+Authoring complexity : 15.0  [moderate]
+────────────────────────────────────────────
+  operations                   +5.0
+  filter_depth_penalty         +3.0
+  expression_chains            +0.5
+  unique_columns               +2.0
+  aggregations                 +1.5
+  literal_values               +3.0
+────────────────────────────────────────────
 
 # From a cached plan string
 result = score_plan_string(lf.explain(optimized=False))
 print(result.total, result.tier)
-# 16.0  moderate
+# 15.0  moderate
 ```
 
 ### Context manager — intercept every `collect()`
@@ -133,7 +134,7 @@ from polars_query_dev_complexity import complexity_collect, ComplexityThresholdE
 
 # Accumulate results
 captured = []
-with complexity_collect(callback=captured.append, log=False):
+with complexity_collect(callback=captured.append):
     df1 = lf_simple.collect()   # scores silently, returns DataFrame normally
     df2 = lf_complex.collect()
 
@@ -161,7 +162,7 @@ handler = JSONLFileHandler(
     extra={"app": "my_dash_app", "env": "dev"},
 )
 
-with complexity_collect(callback=handler, log=False):
+with complexity_collect(callback=handler):
     df = lf.collect()
 ```
 
@@ -267,7 +268,7 @@ if not PROD:
         tz=timezone.utc,
         extra={"app": "my_dash_app"},
     )
-    _ctx = complexity_collect(callback=_handler, log=False, log_caller=True)
+    _ctx = complexity_collect(callback=_handler, log_caller=True)
     _ctx.__enter__()
 ```
 
